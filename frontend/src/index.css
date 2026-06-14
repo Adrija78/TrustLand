@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-color: #d7dccf;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-dark-950 text-dark-100 antialiased;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background-color: #eef1e8;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: #a9b1a1;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #858d7d;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white border border-dark-700/50 rounded-xl shadow-sm;
+  }
+
+  .glass-card {
+    @apply bg-white border-2 border-dark-100 rounded-2xl overflow-hidden;
+    box-shadow: 6px 6px 0px rgba(24, 33, 23, 0.1);
+  }
+
+  .collage-tag {
+    @apply px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-tighter bg-accent-100 text-accent-700 border border-accent-300;
+  }
+
+  .scribble-box {
+    @apply relative;
+  }
+
+  .scribble-box::after {
+    content: '';
+    @apply absolute inset-0 border-2 border-dashed border-accent-500/30 rounded-lg;
+    transform: rotate(-1deg);
+  }
+
+  .gradient-text {
+    @apply text-primary-500 font-black tracking-tight;
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 rounded-xl font-black uppercase text-sm
+           bg-accent-300 text-dark-100 border-2 border-dark-100
+           transition-all duration-100
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    box-shadow: 4px 4px 0px #182117;
+  }
+
+  .btn-primary:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px #182117;
+  }
+
+  .btn-primary:active {
+    transform: translate(0px, 0px);
+    box-shadow: 2px 2px 0px #182117;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-xl font-bold uppercase text-sm
+           bg-white text-dark-100 border-2 border-dark-100
+           transition-all duration-100;
+    box-shadow: 3px 3px 0px #182117;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-dark-900;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl font-medium
+           bg-white border-2 border-dark-100
+           text-dark-100 placeholder-dark-400
+           transition-all duration-150;
+  }
+
+  .input-field:focus {
+    @apply outline-none ring-4 ring-primary-100;
+  }
+
+  .select-field {
+    @apply w-full px-4 py-3 rounded-xl font-medium
+           bg-white border-2 border-dark-100
+           text-dark-100
+           transition-all duration-150 cursor-pointer;
+  }
+
+  .select-field:focus {
+    @apply outline-none ring-4 ring-primary-100;
+  }
+
+  .stat-card {
+    @apply glass-card p-6 relative;
+  }
+
+  .stat-card::before {
+    content: '';
+    @apply absolute top-0 left-0 w-full h-1 bg-accent-300;
+  }
+
+  .progress-bar {
+    @apply h-2 rounded-full bg-dark-700 overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-success-50 text-success-600 border border-success-400/30;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning-50 text-warning-600 border border-warning-400/30;
+  }
+
+  .badge-error {
+    @apply badge bg-error-50 text-error-600 border border-error-400/30;
+  }
+
+  .badge-primary {
+    @apply badge bg-primary-50 text-primary-700 border border-primary-300;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-dark-400 font-bold
+           transition-all duration-150 cursor-pointer;
+  }
+
+  .sidebar-item:hover {
+    @apply bg-primary-50 text-primary-700;
+  }
+
+  .sidebar-item.active {
+    @apply bg-primary-50 text-primary-700 border-2 border-primary-500;
+  }
+
+  .table-row {
+    @apply border-b border-dark-700/50 transition-colors;
+  }
+
+  .table-row:hover {
+    @apply bg-dark-900;
+  }
+
+}

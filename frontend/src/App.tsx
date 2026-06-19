@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Landmark, Wallet, User, Briefcase, Award, Plus,
   DollarSign, Check, X, TrendingUp, Users,
   Activity, Coins, Shield, LineChart, Menu,
-  Loader2, Save, Target
+  Loader2, Save, Target, Lock, Unlock
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { WalletProvider, useWallet } from './contexts/WalletContext';
 import { getLoans, createLoan, repayLoan, getPool, depositToPool, getNftAchievements, getDashboardStats } from './lib/supabase';
 import { calculateTrustScore, getScoreColor, getNextTierProgress } from './lib/trustScore';
+import { depositToContract, getChainSnapshot, type ChainSnapshot } from './lib/contract';
 import type { Loan, Pool, NftAchievement, UserType, UserRole } from './types';
 
 // Trust Score Gauge Component
@@ -22,7 +23,7 @@ function TrustGauge({ score, size = 160 }: { score: number; size?: number }) {
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg className="absolute" width={size} height={size}>
-        <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#d7dccf" strokeWidth="10" strokeLinecap="round"
+        <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#dce4d8" strokeWidth="10" strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`} transform={`rotate(-90 ${size/2} ${size/2})`} />
         <motion.circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`} initial={{ strokeDashoffset: circumference }}
@@ -65,12 +66,48 @@ function StatCard({ title, value, icon: Icon, index = 0 }: { title: string; valu
   );
 }
 
+function formatEth(value: string) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '0';
+  return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function OnChainStatus({ snapshot }: { snapshot: ChainSnapshot | null }) {
+  if (!snapshot) return null;
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="text-xs font-black uppercase text-primary-500">Web3 Status</p>
+          <h3 className="font-semibold text-dark-100 mt-1">{snapshot.message}</h3>
+          <p className="text-xs text-dark-400 mt-1 break-all">Contract: {snapshot.address || 'not configured'}</p>
+        </div>
+        <span className={snapshot.enabled && snapshot.isLocal ? 'badge-success' : 'badge-warning'}>
+          {snapshot.enabled && snapshot.isLocal ? 'On-chain ready' : 'Demo safe mode'}
+        </span>
+      </div>
+      {snapshot.enabled && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-sm">
+          <div><p className="text-dark-400">Chain</p><p className="font-bold text-dark-100">{snapshot.chainId ?? '-'}</p></div>
+          <div><p className="text-dark-400">Pool ETH</p><p className="font-bold text-dark-100">{formatEth(snapshot.totalLiquidityEth)}</p></div>
+          <div><p className="text-dark-400">Your Deposit</p><p className="font-bold text-dark-100">{formatEth(snapshot.lenderBalanceEth)} ETH</p></div>
+          <div><p className="text-dark-400">Badges</p><p className="font-bold text-dark-100">{snapshot.reputationBadges}</p></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Layout with Sidebar
 function SidebarLayout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const { address, disconnect } = useWallet();
   const location = useLocation();
   const navigate = useNavigate();
+  const handleDisconnect = () => {
+    disconnect();
+    navigate('/register', { replace: true });
+  };
   const nav = [
     { path: '/dashboard', label: 'Dashboard', icon: Landmark },
     { path: '/loans', label: 'Loans', icon: DollarSign },
@@ -101,7 +138,7 @@ function SidebarLayout({ children }: { children: React.ReactNode }) {
         <div className="p-4 border-t border-dark-700">
           <p className="text-xs text-dark-400 mb-1">Connected</p>
           <p className="font-mono text-sm text-primary-400 truncate">{address?.slice(0, 8)}...{address?.slice(-4)}</p>
-          <button onClick={() => { disconnect(); navigate('/'); }} className="mt-2 w-full text-sm text-error-400 hover:bg-error-500/10 rounded py-1">Disconnect</button>
+          <button onClick={handleDisconnect} className="mt-2 w-full text-sm text-error-400 hover:bg-error-500/10 rounded py-1">Disconnect</button>
         </div>
       </motion.aside>
       <main className="flex-1 overflow-y-auto p-4 lg:p-8"><div className="max-w-6xl mx-auto">{children}</div></main>
@@ -110,16 +147,40 @@ function SidebarLayout({ children }: { children: React.ReactNode }) {
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isConnected, isConnecting } = useWallet();
+  const { isConnected, isConnecting, user } = useWallet();
   if (isConnecting) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></div>;
-  if (!isConnected) return <Navigate to="/register" />;
+  if (!isConnected) return <Navigate to="/register" replace />;
+  if (!hasCompletedOnboarding(user)) return <Navigate to="/register" replace />;
   return <>{children}</>;
+}
+
+const protectedAppPaths = ['/dashboard', '/loans', '/pool', '/nft', '/profile'];
+
+function AuthRouteReset() {
+  const { isConnected, isConnecting } = useWallet();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isConnecting || isConnected) return;
+    if (protectedAppPaths.some(path => location.pathname.startsWith(path))) {
+      navigate('/register', { replace: true });
+    }
+  }, [isConnected, isConnecting, location.pathname, navigate]);
+
+  return null;
+}
+
+function hasCompletedOnboarding(user: { role?: UserRole; user_type?: UserType | null; name?: string | null; trust_score?: number } | null) {
+  if (!user) return false;
+  if (user.role === 'lender') return true;
+  return Boolean(user.user_type || user.name || (user.trust_score ?? 0) > 0);
 }
 
 // Landing Page
 function LandingPage() {
   const navigate = useNavigate();
-  const { isConnected, connect, isConnecting } = useWallet();
+  const { isConnected, connect, isConnecting, walletError, clearWalletError } = useWallet();
   const [stats, setStats] = useState({ totalValueLocked: 100000, totalLoansIssued: 250000, activeBorrowers: 1250, repaymentRate: 97 });
   useEffect(() => { getDashboardStats().then(setStats).catch(() => {}); }, []);
   const features = [
@@ -129,9 +190,10 @@ function LandingPage() {
     { icon: Award, title: 'NFT Credit Passport', desc: 'Earn NFT badges for successful repayments.' },
   ];
   const handleConnect = async () => {
+    clearWalletError();
     try {
       if (!isConnected) await connect();
-      navigate('/dashboard');
+      navigate(isConnected ? '/dashboard' : '/register');
     } catch (e) {
       console.error(e);
     }
@@ -166,6 +228,7 @@ function LandingPage() {
               <button onClick={handleConnect} className="btn-primary text-lg !px-10 !py-4">Get Started</button>
               <a href="#features" className="px-10 py-4 rounded-xl border border-dark-700 text-white font-semibold hover:bg-dark-800 transition">Learn More</a>
             </div>
+            {walletError && <p className="mt-4 text-sm text-accent-200">{walletError}</p>}
           </motion.div>
         </div>
       </section>
@@ -207,7 +270,7 @@ function LandingPage() {
         </div>
       </section>
 
-      <section className="py-32 bg-primary-500">
+      <section className="py-32 bg-accent-300">
         <div className="container mx-auto px-6 text-center">
           <h2 className="text-4xl font-bold text-dark-950 mb-8">Ready to build your reputation?</h2>
           <button onClick={handleConnect} className="px-12 py-5 bg-dark-950 text-white rounded-2xl font-bold text-xl hover:bg-dark-900 transition shadow-2xl">Start Your Journey</button>
@@ -230,7 +293,7 @@ function LandingPage() {
 // Register Page
 function RegisterPage() {
   const navigate = useNavigate();
-  const { connect, isConnected, user, updateUserProfile, isConnecting } = useWallet();
+  const { connect, isConnected, user, updateUserProfile, isConnecting, walletError, clearWalletError } = useWallet();
   const [step, setStep] = useState<'wallet' | 'role' | 'profile' | 'done'>('wallet');
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ 
@@ -248,9 +311,23 @@ function RegisterPage() {
     skills: '',
     occupation: ''
   });
-  useEffect(() => { if (isConnected && user) setStep('role'); }, [isConnected, user]);
+  useEffect(() => {
+    if (!isConnected) {
+      queueMicrotask(() => setStep('wallet'));
+      return;
+    }
+    if (!user) return;
+    if (hasCompletedOnboarding(user)) {
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+    queueMicrotask(() => setStep('role'));
+  }, [isConnected, navigate, user]);
   const handleRole = async (role: UserRole) => {
-    if (role === 'lender') { updateUserProfile({ role }); setStep('done'); }
+    if (role === 'lender') {
+      await updateUserProfile({ role });
+      navigate('/dashboard', { replace: true });
+    }
     else setStep('profile');
   };
   const handleSubmit = async (e: React.FormEvent) => {
@@ -272,10 +349,11 @@ function RegisterPage() {
         skills: form.skills ? form.skills.split(',').map(s => s.trim()).filter(Boolean) : null,
         occupation: form.occupation || null,
       });
-      setStep('done');
+      navigate('/dashboard', { replace: true });
     } finally { setLoading(false); }
   };
-  if (step === 'done') return (
+  const currentStep = isConnected && user ? step : 'wallet';
+  if (currentStep === 'done') return (
     <div className="min-h-screen flex items-center justify-center p-6">
       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="glass-card p-8 text-center">
         <Check className="w-16 h-16 text-success-400 mx-auto mb-4" />
@@ -287,17 +365,19 @@ function RegisterPage() {
   );
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
-      <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-8 w-full max-w-md relative z-10">
-        {step === 'wallet' && (
+      <motion.div key={currentStep} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="glass-card p-8 w-full max-w-md relative z-10">
+        {currentStep === 'wallet' && (
           <div className="text-center">
             <Wallet className="w-12 h-12 text-primary-400 mx-auto mb-4" />
             <h2 className="text-xl font-bold text-dark-100 mb-4">Connect Your Wallet</h2>
-            <button onClick={async () => { setLoading(true); try { await connect(); } finally { setLoading(false); } }} disabled={loading || isConnecting} className="btn-primary w-full">
+            <button onClick={async () => { clearWalletError(); setLoading(true); try { await connect(); } catch { /* WalletContext shows the message. */ } finally { setLoading(false); } }} disabled={loading || isConnecting} className="btn-primary w-full">
               {loading || isConnecting ? 'Connecting...' : 'Connect MetaMask'}
             </button>
+            {walletError && <p className="mt-3 text-sm text-error-500">{walletError}</p>}
+            <p className="mt-3 text-xs text-dark-400">After disconnecting, reconnect manually from here when you are ready.</p>
           </div>
         )}
-        {step === 'role' && (
+        {currentStep === 'role' && (
           <div className="text-center">
             <h2 className="text-xl font-bold text-dark-100 mb-4">Choose Your Role</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -306,7 +386,7 @@ function RegisterPage() {
             </div>
           </div>
         )}
-        {step === 'profile' && (
+        {currentStep === 'profile' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <h2 className="text-xl font-bold text-dark-100 mb-4">Complete Your Profile</h2>
             <div className="grid grid-cols-3 gap-2">
@@ -378,20 +458,23 @@ function RegisterPage() {
 
 // Dashboard Page
 function DashboardPage() {
-  const { user } = useWallet();
+  const { address, user } = useWallet();
   const [loans, setLoans] = useState<Loan[]>([]);
   const [pool, setPool] = useState<Pool | null>(null);
   const [nfts, setNfts] = useState<NftAchievement[]>([]);
+  const [chain, setChain] = useState<ChainSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!user) return;
-    Promise.all([getLoans(user.id), getPool(), getNftAchievements(user.id)]).then(([l, p, n]) => { setLoans(l || []); setPool(p); setNfts(n || []); }).finally(() => setLoading(false));
-  }, [user]);
+    Promise.all([getLoans(user.id), getPool(), getNftAchievements(user.id), getChainSnapshot(address)])
+      .then(([l, p, n, c]) => { setLoans(l || []); setPool(p); setNfts(n || []); setChain(c); })
+      .finally(() => setLoading(false));
+  }, [address, user]);
   if (loading) return <SidebarLayout><div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></div></SidebarLayout>;
   const active = loans.filter(l => l.status === 'approved');
   const pending = loans.filter(l => l.status === 'pending');
   const chartData = [{ m: 'Jan', s: 45 }, { m: 'Feb', s: 52 }, { m: 'Mar', s: 58 }, { m: 'Apr', s: 65 }, { m: 'May', s: 72 }, { m: 'Jun', s: user?.trust_score || 75 }];
-  const pieData = [{ name: 'Repaid', v: loans.filter(l => l.status === 'repaid').length, c: '#2f7246' }, { name: 'Active', v: active.length, c: '#366b49' }, { name: 'Pending', v: pending.length, c: '#9b6d1f' }];
+  const pieData = [{ name: 'Repaid', v: loans.filter(l => l.status === 'repaid').length, c: '#10b981' }, { name: 'Active', v: active.length, c: '#14b8a6' }, { name: 'Pending', v: pending.length, c: '#f0b429' }];
   return (
     <SidebarLayout>
       <div className="space-y-6">
@@ -405,23 +488,24 @@ function DashboardPage() {
           <StatCard title="Active Loans" value={active.length} icon={Landmark} index={2} />
           <StatCard title="NFT Badges" value={nfts.length} icon={Award} index={3} />
         </div>
+        <OnChainStatus snapshot={chain} />
         <div className="grid lg:grid-cols-2 gap-4">
           <div className="glass-card p-4">
             <h3 className="font-semibold text-dark-100 mb-4 flex items-center gap-2"><Activity className="w-4 h-4 text-primary-400" />Trust Score Progress</h3>
-            <div className="h-48">
+            <div className="h-48 min-w-0 min-h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData}>
-                  <XAxis dataKey="m" stroke="#64748b" fontSize={10} />
-                  <YAxis domain={[0, 100]} stroke="#64748b" fontSize={10} />
-                  <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #d7dccf', borderRadius: 8, color: '#182117' }} />
-                  <Area type="monotone" dataKey="s" stroke="#366b49" fill="#366b49" fillOpacity={0.12} />
+                  <XAxis dataKey="m" stroke="#61705d" fontSize={10} />
+                  <YAxis domain={[0, 100]} stroke="#61705d" fontSize={10} />
+                  <Tooltip contentStyle={{ background: '#f8faf7', border: '1px solid #dce4d8', borderRadius: 8, color: '#111a17' }} />
+                  <Area type="monotone" dataKey="s" stroke="#14b8a6" fill="#14b8a6" fillOpacity={0.14} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
           <div className="glass-card p-4">
             <h3 className="font-semibold text-dark-100 mb-4">Loan Distribution</h3>
-            <div className="h-48">
+            <div className="h-48 min-w-0 min-h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="v">{pieData.map((e, i) => <Cell key={i} fill={e.c} />)}</Pie>
@@ -530,17 +614,39 @@ function LoansPage() {
 
 // Pool Page
 function PoolPage() {
-  const { user } = useWallet();
+  const { address, user } = useWallet();
   const [pool, setPool] = useState<Pool | null>(null);
+  const [chain, setChain] = useState<ChainSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDeposit, setShowDeposit] = useState(false);
   const [amount, setAmount] = useState('');
   const [saving, setSaving] = useState(false);
-  useEffect(() => { getPool().then(p => setPool(p)).finally(() => setLoading(false)); }, []);
+  const [txMessage, setTxMessage] = useState('');
+  useEffect(() => {
+    Promise.all([getPool(), getChainSnapshot(address)])
+      .then(([p, c]) => { setPool(p); setChain(c); })
+      .finally(() => setLoading(false));
+  }, [address]);
   const handleDeposit = async () => {
-    if (!user || !pool) return;
+    if (!user || !pool || !amount) return;
     setSaving(true);
-    try { await depositToPool(pool.id, user.id, parseFloat(amount)); const p = await getPool(); setPool(p); setShowDeposit(false); setAmount(''); } finally { setSaving(false); }
+    setTxMessage('');
+    try {
+      if (chain?.enabled && chain.isLocal) {
+        const hash = await depositToContract(amount);
+        setTxMessage(`On-chain deposit confirmed: ${hash.slice(0, 10)}...${hash.slice(-6)}`);
+      } else {
+        await depositToPool(pool.id, user.id, parseFloat(amount));
+        setTxMessage('Demo deposit saved locally. Switch MetaMask to Hardhat Local for real contract deposits.');
+      }
+      const [p, c] = await Promise.all([getPool(), getChainSnapshot(address)]);
+      setPool(p);
+      setChain(c);
+      setShowDeposit(false);
+      setAmount('');
+    } catch (error) {
+      setTxMessage(error instanceof Error ? error.message : 'Deposit failed.');
+    } finally { setSaving(false); }
   };
   if (loading) return <SidebarLayout><Loader2 className="w-8 h-8 animate-spin text-primary-500 mx-auto mt-32" /></SidebarLayout>;
   return (
@@ -550,6 +656,8 @@ function PoolPage() {
           <div><h1 className="text-2xl font-bold text-dark-100">Lending Pool</h1><p className="text-dark-400">Community liquidity</p></div>
           <button onClick={() => setShowDeposit(true)} className="btn-primary text-sm flex items-center gap-2"><Plus className="w-4 h-4" />Deposit</button>
         </div>
+        <OnChainStatus snapshot={chain} />
+        {txMessage && <div className="glass p-3 text-sm text-dark-300 border-primary-300">{txMessage}</div>}
         {pool && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard title="Liquidity" value={`$${Number(pool.total_liquidity).toLocaleString()}`} icon={Coins} />
@@ -566,8 +674,9 @@ function PoolPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-dark-100/20 z-50 flex items-center justify-center p-4" onClick={() => setShowDeposit(false)}>
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} className="glass-card p-6 w-full max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
               <h2 className="text-lg font-bold text-dark-100">Deposit to Pool</h2>
-              <input placeholder="Amount ($)" type="number" value={amount} onChange={e => setAmount(e.target.value)} className="input-field" />
-              <div className="grid grid-cols-4 gap-2">{[100, 500, 1000, 5000].map(v => <button key={v} onClick={() => setAmount(v.toString())} className="glass py-2 text-sm hover:bg-dark-700">${v}</button>)}</div>
+              <input placeholder={chain?.enabled && chain.isLocal ? 'Amount (ETH)' : 'Amount ($ demo)'} type="number" step="0.001" min="0" value={amount} onChange={e => setAmount(e.target.value)} className="input-field" />
+              <div className="grid grid-cols-4 gap-2">{(chain?.enabled && chain.isLocal ? [0.01, 0.05, 0.1, 1] : [100, 500, 1000, 5000]).map(v => <button key={v} onClick={() => setAmount(v.toString())} className="glass py-2 text-sm hover:bg-dark-700">{chain?.enabled && chain.isLocal ? `${v} ETH` : `$${v}`}</button>)}</div>
+              <p className="text-xs text-dark-400">{chain?.enabled && chain.isLocal ? 'This will send ETH to the local TrustLend contract.' : 'This will update the local demo pool without sending a blockchain transaction.'}</p>
               <div className="flex gap-2"><button onClick={() => setShowDeposit(false)} className="btn-secondary flex-1">Cancel</button><button onClick={handleDeposit} disabled={saving || !amount} className="btn-primary flex-1">{saving ? 'Processing...' : 'Deposit'}</button></div>
             </motion.div>
           </motion.div>
@@ -579,10 +688,16 @@ function PoolPage() {
 
 // NFT Page
 function NftPage() {
-  const { user } = useWallet();
+  const { address, user } = useWallet();
   const [nfts, setNfts] = useState<NftAchievement[]>([]);
+  const [chain, setChain] = useState<ChainSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { if (!user) return; getNftAchievements(user.id).then(n => setNfts(n || [])).finally(() => setLoading(false)); }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([getNftAchievements(user.id), getChainSnapshot(address)])
+      .then(([n, c]) => { setNfts(n || []); setChain(c); })
+      .finally(() => setLoading(false));
+  }, [address, user]);
   const tiers = { bronze: { color: '#cd7f32', loans: 1 }, silver: { color: '#c0c0c0', loans: 3 }, gold: { color: '#ffd700', loans: 5 }, platinum: { color: '#e5e4e2', loans: 10 } };
   const progress = getNextTierProgress(user?.successful_loans || 0);
   if (loading) return <SidebarLayout><Loader2 className="w-8 h-8 animate-spin text-primary-500 mx-auto mt-32" /></SidebarLayout>;
@@ -590,6 +705,7 @@ function NftPage() {
     <SidebarLayout>
       <div className="space-y-6">
         <div><h1 className="text-2xl font-bold text-dark-100">NFT Credit Passport</h1><p className="text-dark-400">Your on-chain reputation</p></div>
+        <OnChainStatus snapshot={chain} />
         <div className="glass-card p-6">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-16 h-16 rounded-xl bg-primary-700 flex items-center justify-center text-2xl font-bold text-dark-100">{user?.reputation_level || 1}</div>
@@ -643,9 +759,7 @@ function ProfilePage() {
     user_type: user?.user_type || 'student' as UserType
   });
   const [saving, setSaving] = useState(false);
-  const [preview, setPreview] = useState(calculateTrustScore({}));
-  useEffect(() => {
-    setPreview(calculateTrustScore({ 
+  const preview = useMemo(() => calculateTrustScore({
       user_type: form.user_type,
       education: form.education || undefined, 
       certifications: form.certifications ? form.certifications.split(',').map(c => c.trim()).filter(Boolean) : undefined,
@@ -658,8 +772,7 @@ function ProfilePage() {
       internships: parseInt(form.internships) || undefined,
       skills: form.skills ? form.skills.split(',').map(s => s.trim()).filter(Boolean) : undefined,
       occupation: form.occupation || undefined,
-    }));
-  }, [form]);
+    }), [form]);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -770,6 +883,7 @@ export default function App() {
   return (
     <WalletProvider>
       <BrowserRouter>
+        <AuthRouteReset />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -784,4 +898,3 @@ export default function App() {
     </WalletProvider>
   );
 }
-

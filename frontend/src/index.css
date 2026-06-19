@@ -4,7 +4,7 @@
 
 @layer base {
   * {
-    border-color: #d7dccf;
+    border-color: #dce4d8;
   }
 
   html {
@@ -25,31 +25,31 @@
   }
 
   ::-webkit-scrollbar-track {
-    background-color: #eef1e8;
+    background-color: #eef2ec;
   }
 
   ::-webkit-scrollbar-thumb {
-    background-color: #a9b1a1;
+    background-color: #8b9b85;
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background-color: #858d7d;
+    background-color: #61705d;
   }
 }
 
 @layer components {
   .glass {
-    @apply bg-white border border-dark-700/50 rounded-xl shadow-sm;
+    @apply bg-dark-50 border border-dark-200 rounded-xl shadow-sm;
   }
 
   .glass-card {
-    @apply bg-white border-2 border-dark-100 rounded-2xl overflow-hidden;
-    box-shadow: 6px 6px 0px rgba(24, 33, 23, 0.1);
+    @apply bg-dark-50 border border-dark-200 rounded-2xl overflow-hidden;
+    box-shadow: 0 18px 50px rgba(8, 16, 14, 0.12);
   }
 
   .collage-tag {
-    @apply px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-tighter bg-accent-100 text-accent-700 border border-accent-300;
+    @apply px-3 py-1 rounded-full font-bold text-[10px] uppercase tracking-tighter bg-primary-100 text-primary-800 border border-primary-200;
   }
 
   .scribble-box {
@@ -58,47 +58,48 @@
 
   .scribble-box::after {
     content: '';
-    @apply absolute inset-0 border-2 border-dashed border-accent-500/30 rounded-lg;
+    @apply absolute inset-0 border-2 border-dashed border-primary-500/30 rounded-lg;
     transform: rotate(-1deg);
   }
 
   .gradient-text {
-    @apply text-primary-500 font-black tracking-tight;
+    @apply text-primary-400 font-black tracking-tight;
   }
 
   .btn-primary {
     @apply px-6 py-3 rounded-xl font-black uppercase text-sm
-           bg-accent-300 text-dark-100 border-2 border-dark-100
+           bg-primary-500 text-white border border-primary-400
            transition-all duration-100
            disabled:opacity-50 disabled:cursor-not-allowed;
-    box-shadow: 4px 4px 0px #182117;
+    box-shadow: 0 12px 28px rgba(20, 184, 166, 0.24);
   }
 
   .btn-primary:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 6px 6px 0px #182117;
+    @apply bg-primary-400;
+    transform: translateY(-1px);
+    box-shadow: 0 16px 36px rgba(20, 184, 166, 0.28);
   }
 
   .btn-primary:active {
     transform: translate(0px, 0px);
-    box-shadow: 2px 2px 0px #182117;
+    box-shadow: 0 8px 18px rgba(20, 184, 166, 0.22);
   }
 
   .btn-secondary {
     @apply px-6 py-3 rounded-xl font-bold uppercase text-sm
-           bg-white text-dark-100 border-2 border-dark-100
+           bg-dark-50 text-dark-900 border border-dark-200
            transition-all duration-100;
-    box-shadow: 3px 3px 0px #182117;
+    box-shadow: 0 10px 24px rgba(8, 16, 14, 0.08);
   }
 
   .btn-secondary:hover {
-    @apply bg-dark-900;
+    @apply bg-primary-50 text-primary-800 border-primary-200;
   }
 
   .input-field {
     @apply w-full px-4 py-3 rounded-xl font-medium
-           bg-white border-2 border-dark-100
-           text-dark-100 placeholder-dark-400
+           bg-white border border-dark-200
+           text-dark-900 placeholder-dark-400
            transition-all duration-150;
   }
 
@@ -108,8 +109,8 @@
 
   .select-field {
     @apply w-full px-4 py-3 rounded-xl font-medium
-           bg-white border-2 border-dark-100
-           text-dark-100
+           bg-white border border-dark-200
+           text-dark-900
            transition-all duration-150 cursor-pointer;
   }
 
@@ -123,11 +124,11 @@
 
   .stat-card::before {
     content: '';
-    @apply absolute top-0 left-0 w-full h-1 bg-accent-300;
+    @apply absolute top-0 left-0 w-full h-1 bg-primary-400;
   }
 
   .progress-bar {
-    @apply h-2 rounded-full bg-dark-700 overflow-hidden;
+    @apply h-2 rounded-full bg-dark-200 overflow-hidden;
   }
 
   .progress-fill {
@@ -160,11 +161,11 @@
   }
 
   .sidebar-item:hover {
-    @apply bg-primary-50 text-primary-700;
+    @apply bg-primary-50 text-primary-800;
   }
 
   .sidebar-item.active {
-    @apply bg-primary-50 text-primary-700 border-2 border-primary-500;
+    @apply bg-primary-50 text-primary-800 border border-primary-300;
   }
 
   .table-row {
@@ -172,7 +173,7 @@
   }
 
   .table-row:hover {
-    @apply bg-dark-900;
+    @apply bg-primary-50;
   }
 
 }

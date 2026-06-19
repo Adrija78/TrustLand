@@ -96,10 +96,10 @@ export function calculateTrustScore(profile: ProfileData): TrustScoreResult {
 }
 
 export function getScoreColor(score: number): string {
-  if (score >= 80) return '#10b981'; // Green accent
-  if (score >= 60) return '#fbbd08'; // Original Gold
-  if (score >= 40) return '#f97316'; // Orange accent
-  return '#ff4b2b'; // Original Red
+  if (score >= 80) return '#10b981';
+  if (score >= 60) return '#14b8a6';
+  if (score >= 40) return '#f0b429';
+  return '#e11d48';
 }
 
 export function getNextTierProgress(loans: number): { current: number; target: number; percentage: number } {

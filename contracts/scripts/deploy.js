@@ -1,4 +1,6 @@
-import { ethers } from "hardhat";
+import hardhat from "hardhat";
+
+const { ethers } = hardhat;
 
 async function main() {
   const TrustLend = await ethers.getContractFactory("TrustLend");

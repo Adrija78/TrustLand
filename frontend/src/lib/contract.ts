@@ -44,7 +44,7 @@ export function hasContractAddress() {
     && /^0x[a-fA-F0-9]{40}$/.test(TRUSTLEND_CONTRACT_ADDRESS);
 }
 
-function demoSnapshot(message = 'Blockchain data unavailable. Running in demo mode.'): ChainSnapshot {
+function demoSnapshot(message = 'Live account data is temporarily unavailable. You can still explore the app.'): ChainSnapshot {
   return {
     enabled: false,
     address: TRUSTLEND_CONTRACT_ADDRESS,
@@ -62,25 +62,25 @@ function demoSnapshot(message = 'Blockchain data unavailable. Running in demo mo
 
 function getUserFacingTransactionError(error: unknown) {
   if (typeof error === 'object' && error && 'code' in error && error.code === 4001) {
-    return 'Transaction was cancelled in MetaMask.';
+    return 'The payment was cancelled. Nothing was charged.';
   }
   const message = error instanceof Error ? error.message.toLowerCase() : '';
-  if (message.includes('user rejected') || message.includes('user denied')) return 'Transaction was cancelled in MetaMask.';
+  if (message.includes('user rejected') || message.includes('user denied')) return 'The payment was cancelled. Nothing was charged.';
   if (message.includes('current network') || message.includes('unsupported chain')) {
-    return `Switch MetaMask to Sepolia (${SEPOLIA_CHAIN_ID}) before sending transactions.`;
+    return 'Please switch to the correct network in your account app, then try again.';
   }
-  if (message.includes('insufficient funds')) return 'Insufficient wallet balance for this transaction.';
-  if (message.includes('network') || message.includes('could not coalesce')) return 'Blockchain network unavailable. Running in demo mode.';
-  return 'Transaction could not be completed. Please check your wallet and try again.';
+  if (message.includes('insufficient funds')) return 'Your account balance is too low for this payment. Add funds and try again.';
+  if (message.includes('network') || message.includes('could not coalesce')) return 'We couldn\'t reach the payment network. Please check your connection and try again.';
+  return 'Something went wrong. Please check your account and try again.';
 }
 
 async function getProvider() {
-  if (typeof window.ethereum === 'undefined') throw new Error('MetaMask is not available');
+  if (typeof window.ethereum === 'undefined') throw new Error('No account app is available. Please install one to continue.');
   return new BrowserProvider(window.ethereum);
 }
 
 async function getContract(withSigner = false) {
-  if (!hasContractAddress()) throw new Error('Contract address is not configured');
+  if (!hasContractAddress()) throw new Error('Lending services are not fully set up yet.');
   const provider = await getProvider();
   const runner = withSigner ? await provider.getSigner() : provider;
   return { provider, contract: new Contract(TRUSTLEND_CONTRACT_ADDRESS, TRUSTLEND_ABI, runner) };
@@ -88,7 +88,7 @@ async function getContract(withSigner = false) {
 
 export async function getChainSnapshot(account?: string | null): Promise<ChainSnapshot> {
   if (!hasContractAddress()) {
-    return demoSnapshot('Demo mode: contract address is not configured.');
+    return demoSnapshot('Preview mode: lending services are not fully connected yet.');
   }
 
   try {
@@ -137,8 +137,8 @@ export async function getChainSnapshot(account?: string | null): Promise<ChainSn
       borrowerTrustScore: profile?.exists ? Number(profile.trustScore) : null,
       message:
         chainId === SEPOLIA_CHAIN_ID
-          ? 'TrustLend Remix contract connected on Sepolia.'
-          : `Connected to unsupported chain ${chainId}. Switch MetaMask to Sepolia.`,
+          ? 'Your account is connected and ready.'
+          : 'Please switch to the supported network in your account app.',
     };
   } catch (error) {
     console.error("========== TRUSTLEND ERROR ==========");
@@ -148,8 +148,8 @@ export async function getChainSnapshot(account?: string | null): Promise<ChainSn
 
     return demoSnapshot(
       error instanceof Error
-        ? error.message
-        : 'Blockchain data unavailable. Running in demo mode.'
+        ? 'We couldn\'t load your account details right now. Please try again shortly.'
+        : 'Live account data is temporarily unavailable. You can still explore the app.'
     );
   }
 }
@@ -159,10 +159,10 @@ export async function depositToContract(amountEth: string) {
     const { provider, contract } = await getContract(true);
     const network = await provider.getNetwork();
     if (Number(network.chainId) !== SEPOLIA_CHAIN_ID) {
-       throw new Error('Please switch MetaMask to Sepolia.');
+       throw new Error('Please switch to the supported network in your account app.');
     }
     const code = await provider.getCode(TRUSTLEND_CONTRACT_ADDRESS);
-    if (code === '0x') throw new Error('Contract is not deployed on the current network.');
+    if (code === '0x') throw new Error('Lending services are not available on this network yet.');
     const tx = await contract.deposit({ value: parseEther(amountEth) });
     const receipt = await tx.wait();
     return receipt?.hash ?? tx.hash;
@@ -188,7 +188,7 @@ export async function requestLoanOnChain(
   console.log("STEP 3", Number(network.chainId));
 
   if (Number(network.chainId) !== SEPOLIA_CHAIN_ID) {
-    throw new Error("Please switch MetaMask to Sepolia.");
+    throw new Error("Please switch to the supported network in your account app.");
   }
 
   console.log("STEP 4");
@@ -211,7 +211,7 @@ export async function repayLoanOnChain(loanId: number) {
   const network = await provider.getNetwork();
 
   if (Number(network.chainId) !== SEPOLIA_CHAIN_ID) {
-    throw new Error("Please switch MetaMask to Sepolia.");
+    throw new Error("Please switch to the supported network in your account app.");
   }
 
   const loan = await contract.getLoan(loanId);
@@ -220,7 +220,7 @@ export async function repayLoanOnChain(loanId: number) {
   const repaymentValue = repaymentDue - amountRepaid;
 
   if (repaymentValue <= 0n) {
-    throw new Error('This loan has no outstanding repayment amount.');
+    throw new Error('This loan is already fully paid off.');
   }
 
   const tx = await contract.repay(loanId, { value: repaymentValue });

@@ -24,13 +24,13 @@ const APP_WALLET_SESSION_KEYS = [
 
 function getWalletErrorMessage(error: unknown) {
   if (typeof error === 'object' && error && 'code' in error && error.code === 4001) {
-    return 'Wallet connection was cancelled in MetaMask.';
+    return 'Sign-in was cancelled. You can try again whenever you\'re ready.';
   }
   if (typeof error === 'object' && error && 'code' in error && error.code === -32002) {
-    return 'MetaMask already has a connection request open. Please check the MetaMask popup.';
+    return 'A sign-in request is already open. Please check your account app and approve it there.';
   }
-  const message = error instanceof Error ? error.message : 'Wallet connection failed.';
-  if (message.toLowerCase().includes('user rejected')) return 'Wallet connection was cancelled in MetaMask.';
+  const message = error instanceof Error ? error.message : 'We couldn\'t sign you in. Please try again.';
+  if (message.toLowerCase().includes('user rejected')) return 'Sign-in was cancelled. You can try again whenever you\'re ready.';
   return message;
 }
 
@@ -150,17 +150,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [loadWalletUser, resetWalletState]);
 
   const connect = async () => {
-    if (isConnecting) throw new Error('Wallet connection is already in progress.');
+    if (isConnecting) throw new Error('Sign-in is already in progress.');
     setWalletError(null);
     if (typeof window.ethereum === 'undefined') {
-      const message = 'No wallet found. Install MetaMask or open this in a Web3 browser.';
+      const message = 'No account app found. Install a supported account app to sign in.';
       setWalletError(message);
       throw new Error(message);
     }
     setIsConnecting(true);
     try {
       const accounts = normalizeAccounts(await window.ethereum.request({ method: 'eth_requestAccounts' }));
-      if (!accounts[0]) throw new Error('No wallet account was selected.');
+      if (!accounts[0]) throw new Error('No account was selected. Please choose one to continue.');
       clearWalletSessionStorage();
       setAddress(accounts[0]);
       setUser(await loadWalletUser(accounts[0]));
